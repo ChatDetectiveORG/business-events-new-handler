@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
-	e "app/pkg/errors"
 	"app/src/infrastructure/config"
+
+	e "github.com/ChatDetectiveORG/shared/errors"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -33,8 +34,8 @@ func GetClient(config *config.Config) (*Client, *e.ErrorInfo) {
 		// Locale: локализация для работы с сервером (по умолчанию "en_US").
 		// Dial: функция установки TCP-соединения с таймаутом (здесь 10 секунд), защищает от "вечного" ожидания при сетевых проблемах.
 		cfg := amqp.Config{
-			Heartbeat: 10 * time.Second,           // Период heartbeat сообщений между приложением и RabbitMQ
-			Locale:    "en_US",                    // Язык сервера/клиента
+			Heartbeat: 10 * time.Second,                   // Период heartbeat сообщений между приложением и RabbitMQ
+			Locale:    "en_US",                            // Язык сервера/клиента
 			Dial:      amqp.DefaultDial(10 * time.Second), // Таймаут создания TCP-соединения с сервером
 		}
 

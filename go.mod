@@ -12,6 +12,7 @@ require (
 )
 
 require (
+	github.com/ChatDetectiveORG/shared v0.0.0-20260315130433-9501c6b260ec // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
