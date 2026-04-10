@@ -4,6 +4,7 @@ import (
 	"app/src/application"
 	"app/src/infrastructure/config"
 	"app/src/infrastructure/metrics"
+	"app/src/infrastructure/postgresql"
 	"context"
 	"os/signal"
 	"sync"
@@ -19,6 +20,11 @@ func main() {
 	config, _ := config.FetchConfig()
 
 	err := rabbitmq.InitRabbitMQ(config, rabbitmq.RequiredModels)
+	if !err.IsNil() {
+		log.Fatal(err.JSON())
+	}
+
+	err = postgresql.InitPostgresql()
 	if !err.IsNil() {
 		log.Fatal(err.JSON())
 	}

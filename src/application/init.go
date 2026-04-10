@@ -1,28 +1,24 @@
 package application
 
 import (
-	e "github.com/ChatDetectiveORG/shared/errors"
-	h "github.com/ChatDetectiveORG/shared/handlers"
+	"app/src/application/endpoints"
 	"app/src/infrastructure/config"
 	"app/src/infrastructure/rabbitmq"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"sync"
-	"time"
 
-	tele "gopkg.in/telebot.v4"
+	e "github.com/ChatDetectiveORG/shared/errors"
+	h "github.com/ChatDetectiveORG/shared/handlers"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 var (
-	gorutineEndpoints = make(map[string]chan amqp.Delivery, 1000)
-	handlerTerminated = make(chan string, 1000)
-	errors            = make(chan *e.ErrorInfo, 1000)
-	rabbitmqChannel   *amqp.Channel
+	errors          = make(chan *e.ErrorInfo, 1000)
+	rabbitmqChannel *amqp.Channel
 )
 
 const shardCount = 64
@@ -82,14 +78,6 @@ func initRabbitmqQueue(cfg *config.Config) (<-chan amqp.Delivery, []string, *amq
 	return merged, consumerTags, rabbitmqChannel, e.Nil()
 }
 
-type WorkerArgs struct {
-	wg          *sync.WaitGroup
-	ctx         context.Context
-	updatesChan chan amqp.Delivery
-	cfg         *config.Config
-	sessionId   string
-}
-
 func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGroup) *e.ErrorInfo {
 	var consumer <-chan amqp.Delivery
 	var consumerTags []string
@@ -101,6 +89,16 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 	// router is a package-level singleton and was initialized before rabbitmqChannel was set.
 	// Update it to use the live channel to avoid nil deref in PublishWithContext.
 	router.RabbitmqChannel = rabbitmqChannel
+	router.ReplicaCount = cfg.RuntimeConfig.NumRoutingGorutines
+	if router.ReplicaCount <= 0 {
+		// Keep sharding active even if env var is missing.
+		router.ReplicaCount = shardCount
+	}
+	podID := cfg.RuntimeConfig.PodID
+	if podID == "" {
+		podID = "unknown"
+	}
+	router.InitSharding(podID, wg, ctx)
 	defer rabbitmqChannel.Close()
 
 	go hanleError(errors, ctx, wg)
@@ -111,23 +109,23 @@ func ListenToRabbitmq(cfg *config.Config, ctx context.Context, wg *sync.WaitGrou
 			for _, tag := range consumerTags {
 				_ = rabbitmqChannel.Cancel(tag, false)
 			}
-			for sessionId, ch := range gorutineEndpoints {
-				delete(gorutineEndpoints, sessionId)
-				close(ch)
-			}
 			return e.Nil()
-		case sessionId := <-handlerTerminated:
-			if ch, ok := gorutineEndpoints[sessionId]; ok {
-				delete(gorutineEndpoints, sessionId)
-				close(ch)
-			}
 		case delivery, ok := <-consumer:
 			if !ok {
 				// consumer channel closed
-				// ToDo: Не подтверждать доставку
 				return e.FromError(nil, "RabbitMQ consumer channel closed").WithSeverity(e.Critical)
 			}
-			initNewHandlerOrPushToExisting(delivery, ctx, wg, cfg)
+			log.Printf("trace=%s received rk=%s", delivery.CorrelationId, delivery.RoutingKey)
+			if routeErr := router.HandleUpdate(delivery); !routeErr.IsNil() {
+				errors <- routeErr.WithData(map[string]any{"rk": delivery.RoutingKey}).WithSeverity(e.Critical)
+				if nackErr := delivery.Nack(false, false); nackErr != nil {
+					errors <- e.FromError(nackErr, "failed to nack delivery").WithSeverity(e.Critical)
+				}
+				continue
+			}
+			if ackErr := delivery.Ack(false); ackErr != nil {
+				errors <- e.FromError(ackErr, "Ошибка подтверждения получения")
+			}
 		}
 	}
 }
@@ -146,119 +144,15 @@ func hanleError(src chan (*e.ErrorInfo), context context.Context, wg *sync.WaitG
 	}
 }
 
-func initNewHandlerOrPushToExisting(delivery amqp.Delivery, ctx context.Context, wg *sync.WaitGroup, cfg *config.Config) {
-	sessionId, err := sessionIDFromHeaders(delivery.Headers)
-	if !err.IsNil() {
-		errors <- err.WithData(map[string]any{"rk": delivery.RoutingKey}).WithSeverity(e.Critical)
-		return
-	}
-
-	if _, ok := gorutineEndpoints[sessionId]; ok {
-		gorutineEndpoints[sessionId] <- delivery
-	} else {
-		destChan := initHandler(ctx, wg, cfg, sessionId)
-		destChan <- delivery
-		gorutineEndpoints[sessionId] = destChan
-	}
-
-	// close(delivery.Ack(false))
-}
-
-func sessionIDFromHeaders(h amqp.Table) (string, *e.ErrorInfo) {
-	if h == nil {
-		return "", e.NewError("missing headers", "delivery headers are nil")
-	}
-	v, ok := h["session_id"]
-	if !ok || v == nil {
-		return "", e.NewError("missing session_id", "delivery missing header session_id")
-	}
-	switch t := v.(type) {
-	case string:
-		if t == "" {
-			return "", e.NewError("empty session_id", "session_id header is empty")
-		}
-		return t, e.Nil()
-	case []byte:
-		if len(t) == 0 {
-			return "", e.NewError("empty session_id", "session_id header is empty")
-		}
-		return string(t), e.Nil()
-	default:
-		return "", e.NewError("invalid session_id header type", "session_id header has invalid type").WithData(map[string]any{"type": fmt.Sprintf("%T", v)})
-	}
-}
-
 func fmtShardQueue(i int) string {
 	return fmt.Sprintf("%s.q%02d", config.PodType, i)
 }
 
-func initHandler(ctx context.Context, wg *sync.WaitGroup, cfg *config.Config, sessionId string) chan amqp.Delivery {
-	updatesChan := make(chan amqp.Delivery, 1000)
-
-	wg.Add(1)
-	go handle(WorkerArgs{
-		wg:          wg,
-		ctx:         ctx,
-		updatesChan: updatesChan,
-		cfg:         cfg,
-		sessionId:   sessionId,
-	})
-
-	return updatesChan
-}
-
-func handle(args WorkerArgs) {
-	defer args.wg.Done()
-
-	timer := time.NewTimer(args.cfg.RuntimeConfig.HandlerLiveDuration)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-args.ctx.Done():
-			// On shutdown the main loop may already be gone; don't block here.
-			select {
-			case handlerTerminated <- args.sessionId:
-			default:
-			}
-			return
-		case <-timer.C:
-			handlerTerminated <- args.sessionId
-			// TODO: Добавить подтверждение завершения обработки всех текущих апдейтов
-			return
-		case delivery, ok := <-args.updatesChan:
-			if !ok {
-				return
-			}
-			log.Printf("trace=%s received rk=%s", delivery.CorrelationId, delivery.RoutingKey)
-			updateBytes := delivery.Body
-			var update tele.Update
-			unwrappedError := json.Unmarshal(updateBytes, &update)
-			if unwrappedError != nil {
-				errors <- e.FromError(unwrappedError, "failed to unmarshal update").WithSeverity(e.Critical)
-				continue
-			}
-			router.Dispatch(update)
-			// TODO: Сделать подтверждение зависимым от исхода обработки в Dispatch
-			unwrappedError = delivery.Ack(false)
-
-			if unwrappedError != nil {
-				errors <- e.FromError(unwrappedError, "Ошибка подтверждения получения")
-			}
-
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			timer.Reset(args.cfg.RuntimeConfig.HandlerLiveDuration)
-		}
-	}
-}
 
 var router h.Router = h.Router{
 	ErrorChannel:    errors,
 	RabbitmqChannel: rabbitmqChannel,
-	Endpoints: []h.Endpoint{},
+	Endpoints: []h.Endpoint{
+		endpoints.NewSaveEndpoint(),
+	},
 }

@@ -2,7 +2,10 @@ module app
 
 go 1.23.3
 
+// replace github.com/ChatDetectiveORG/shared => ../shared
+
 require (
+	github.com/ChatDetectiveORG/shared v0.1.6
 	github.com/go-pg/pg/v10 v10.15.0
 	github.com/gomodule/redigo v1.9.3
 	github.com/prometheus/client_golang v1.23.2
@@ -12,12 +15,12 @@ require (
 )
 
 require (
-	github.com/ChatDetectiveORG/shared v0.0.0-20260315130433-9501c6b260ec // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-pg/zerochecker v0.2.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect

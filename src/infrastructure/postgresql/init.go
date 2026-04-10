@@ -7,6 +7,7 @@ import (
 	// requiredModels "app/src/infrastructure/postgresql/requiredModels"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
+	models "github.com/ChatDetectiveORG/shared/postgresModels"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
@@ -34,6 +35,12 @@ func InitPostgresql() *e.ErrorInfo {
 	db := GetDB()
 
 	models := []interface{}{
+		(*models.Message)(nil),
+		// (*models.MessageVersion)(nil),
+		(*models.Telegramuser)(nil),
+		(*models.UserSettings)(nil),
+		// (*models.UserLevels)(nil),
+		(*models.Admin)(nil),
 	}
 
 	for _, model := range models {
