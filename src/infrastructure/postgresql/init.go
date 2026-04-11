@@ -36,16 +36,17 @@ func InitPostgresql() *e.ErrorInfo {
 
 	models := []interface{}{
 		(*models.Message)(nil),
-		// (*models.MessageVersion)(nil),
 		(*models.Telegramuser)(nil),
 		(*models.UserSettings)(nil),
-		// (*models.UserLevels)(nil),
 		(*models.Admin)(nil),
+		(*models.MessageVersion)(nil),
+		(*models.UserLevels)(nil),
 	}
 
 	for _, model := range models {
 		err := db.Model(model).CreateTable(&orm.CreateTableOptions{
 			IfNotExists: true,
+			Temp: false,
 		})
 		if err != nil {
 			return e.FromError(err, "error creating table")

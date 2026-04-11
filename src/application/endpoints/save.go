@@ -37,7 +37,10 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 			return e.FromError(err, "failed to get user by telegram id")
 		}
 
-		user.BusinessConnectionIDHash = utils.ToHash(update.BusinessMessage.BusinessConnectionID)
+		user.BusinessConnectionIDHash, err = utils.ToSecureHash(update.BusinessMessage.BusinessConnectionID)
+		if e.IsNonNil(err) {
+			return e.FromError(err, "failed to get secure hash")
+		}
 
 		_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash").Update()
 		if e.IsNonNil(eraw) {
@@ -45,15 +48,20 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		}		
 	}
 
+	businessConnectionIDHash, err := utils.ToSecureHash(update.BusinessMessage.BusinessConnectionID)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get secure hash")
+	}
+
 	user := &models.Telegramuser{
-		BusinessConnectionIDHash: utils.ToHash(update.BusinessMessage.BusinessConnectionID),
+		BusinessConnectionIDHash: businessConnectionIDHash,
 	}
 	db := postgresql.GetDB()
-	err := db.Model(user).
+	eraw := db.Model(user).
 		Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
 		Select()
-	if e.IsNonNil(err) {
-		return e.FromError(err, "failed to select user")
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to select user").WithData(map[string]any{"business_connection_id_hash": businessConnectionIDHash})
 	}
 
 	key, err := utils.DecryptUserKey(user.DataEncryptionKey)
@@ -81,17 +89,23 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		return e.FromError(err, "failed to encrypt message metadata")
 	}
 
+	chatIDHash, err := utils.ToSecureHash(update.BusinessMessage.Chat.ID)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get secure hash")
+	}
+
 	message := &models.Message{
 		SenderID: encryptedId,
 		ChatID: encryptedChatId,
+		ChatIDHash: chatIDHash,
 		MessageID: update.BusinessMessage.ID,
-		BusinessConnectionIDHash: utils.ToHash(update.BusinessMessage.BusinessConnectionID),
+		BusinessConnectionIDHash: businessConnectionIDHash,
 		Metadata: encryptedMetadata,
 	}
 
-	_, err = db.Model(message).Insert()
-	if e.IsNonNil(err) {
-		return e.FromError(err, "failed to insert message")
+	_, eraw = db.Model(message).Insert()
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to insert message")
 	}
 
 	return e.Nil()
