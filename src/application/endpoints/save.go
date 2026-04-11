@@ -28,6 +28,23 @@ func NewSaveEndpoint() h.Endpoint {
 }
 
 func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
+	if update.BusinessMessage.Sender.ID != update.BusinessMessage.Chat.ID {
+		// Отправитель - пользователь бота. Можно обновлять данные.
+		db := postgresql.GetDB()
+		user := &models.Telegramuser{}
+		err := user.GetByTelegramID(db, update.BusinessMessage.Sender.ID)
+		if e.IsNonNil(err) {
+			return e.FromError(err, "failed to get user by telegram id")
+		}
+
+		user.BusinessConnectionIDHash = utils.ToHash(update.BusinessMessage.BusinessConnectionID)
+
+		_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash").Update()
+		if e.IsNonNil(eraw) {
+			return e.FromError(eraw, "failed to update user business connection id hash")
+		}		
+	}
+
 	user := &models.Telegramuser{
 		BusinessConnectionIDHash: utils.ToHash(update.BusinessMessage.BusinessConnectionID),
 	}

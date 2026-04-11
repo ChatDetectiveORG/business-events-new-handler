@@ -66,6 +66,8 @@ github.com/ChatDetectiveORG/shared v0.1.11 h1:0Kpclzm59kkqfVw0YO1KWx8T9laLBK6O2A
 github.com/ChatDetectiveORG/shared v0.1.11/go.mod h1:DEIUmoJNlFQ4dWVnKc6X1XSqrmx+q4fnqDUNU3w6aVA=
 github.com/ChatDetectiveORG/shared v0.1.12 h1:mRvW07rNridPnv26cmvf0CYxJyeQw+4JFQBwrdFYa7w=
 github.com/ChatDetectiveORG/shared v0.1.12/go.mod h1:DEIUmoJNlFQ4dWVnKc6X1XSqrmx+q4fnqDUNU3w6aVA=
+github.com/ChatDetectiveORG/shared v0.1.13 h1:PPP4ymvdtw8QC1DIrxix9Qkqsej8eXebft/u31/Bey8=
+github.com/ChatDetectiveORG/shared v0.1.13/go.mod h1:DEIUmoJNlFQ4dWVnKc6X1XSqrmx+q4fnqDUNU3w6aVA=
 github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
