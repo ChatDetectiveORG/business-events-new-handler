@@ -2,6 +2,8 @@ package endpoints
 
 import (
 	"app/src/infrastructure/postgresql"
+	"encoding/json"
+	"strconv"
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -26,16 +28,51 @@ func NewSaveEndpoint() h.Endpoint {
 }
 
 func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	message := &models.Message{
-		SenderID: utils.Int64ToHash(update.BusinessMessage.Sender.ID),
-		ChatID: utils.Int64ToHash(update.BusinessMessage.Chat.ID),
-		MessageID: update.BusinessMessage.ID,
-		BusinessConnectionID: update.BusinessMessage.BusinessConnectionID,
-		Metadata: update.BusinessMessage,
+	user := &models.Telegramuser{
+		BusinessConnectionIDHash: utils.ToHash(update.BusinessMessage.BusinessConnectionID),
+	}
+	db := postgresql.GetDB()
+	err := db.Model(user).
+		Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
+		Select()
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to select user")
 	}
 
-	db := postgresql.GetDB()
-	_, err := db.Model(message).Insert()
+	key, err := utils.DecryptUserKey(user.DataEncryptionKey)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to decrypt user key")
+	}
+
+	encryptedId, err := utils.Encrypt([]byte(strconv.FormatInt(update.BusinessMessage.Sender.ID, 10)), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt sender id")
+	}
+
+	encryptedChatId, err := utils.Encrypt([]byte(strconv.FormatInt(update.BusinessMessage.Chat.ID, 10)), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt chat id")
+	}
+
+	jsonMetadata, eraw := json.Marshal(update.BusinessMessage)
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to encrypt message metadata")
+	}
+
+	encryptedMetadata, err := utils.Encrypt(jsonMetadata, key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt message metadata")
+	}
+
+	message := &models.Message{
+		SenderID: encryptedId,
+		ChatID: encryptedChatId,
+		MessageID: update.BusinessMessage.ID,
+		BusinessConnectionIDHash: utils.ToHash(update.BusinessMessage.BusinessConnectionID),
+		Metadata: encryptedMetadata,
+	}
+
+	_, err = db.Model(message).Insert()
 	if e.IsNonNil(err) {
 		return e.FromError(err, "failed to insert message")
 	}
