@@ -1,7 +1,7 @@
 package rabbitmq
 
 import (
-	"app/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"

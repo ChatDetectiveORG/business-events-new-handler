@@ -2,16 +2,15 @@
 
 # --- Build stage ---
 FROM golang:latest AS builder
-WORKDIR /build
-COPY go.mod go.sum ./
-RUN go mod download
+WORKDIR /workspace
 COPY . ./
-RUN CGO_ENABLED=0 GOOS=linux go build -o /build/app ./src
+WORKDIR /workspace/business-events-new-handler
+RUN CGO_ENABLED=0 GOOS=linux go build -o /workspace/app ./src
 
 # --- Production image ---
 FROM alpine:3.19 AS prod
 WORKDIR /app
-COPY --from=builder /build/app /app/
+COPY --from=builder /workspace/app /app/
 
 # Добавляем ca-certificates для HTTPS запросов
 RUN apk --no-cache add ca-certificates
@@ -21,16 +20,13 @@ ENTRYPOINT ["/app/app"]
 
 # --- Development image ---
 FROM golang:latest AS dev
-WORKDIR /app
+WORKDIR /workspace
 
 # Установка Air для hot reload
 RUN go install github.com/air-verse/air@latest
 
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Копируем остальные файлы
 COPY . ./
+WORKDIR /workspace/business-events-new-handler
 
 # Air будет запущен из docker-compose с примонтированным volume
 CMD ["air"]

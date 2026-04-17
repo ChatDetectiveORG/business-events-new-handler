@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"app/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 

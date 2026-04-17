@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"app/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
 	"context"
 	"log"
 	"net/http"

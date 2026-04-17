@@ -1,18 +1,18 @@
 package main
 
 import (
-	"app/src/application"
-	"app/src/infrastructure/config"
-	"app/src/infrastructure/metrics"
-	"app/src/infrastructure/postgresql"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/application"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/metrics"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/postgresql"
 	"context"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	// "app/src/infrastructure/postgresql"
-	"app/src/infrastructure/rabbitmq"
+	// "github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/postgresql"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/rabbitmq"
 	"log"
 )
 

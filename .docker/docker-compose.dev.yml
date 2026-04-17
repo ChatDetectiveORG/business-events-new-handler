@@ -1,8 +1,8 @@
 services:
   bot:
     build:
-      context: ..
-      dockerfile: .docker/Dockerfile
+      context: ../..
+      dockerfile: business-events-new-handler/.docker/Dockerfile
       target: ${DOCKER_TARGET:-dev}
     container_name: ${PROJECT_NAME}
     restart: unless-stopped
@@ -17,7 +17,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ..:/app
+      - ../..:/workspace
     ports:
       - ${TELEGRAM_BOT_WEBHOOK_PORT}:${TELEGRAM_BOT_WEBHOOK_PORT}
 

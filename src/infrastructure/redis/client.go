@@ -3,7 +3,7 @@ package redis
 import (
 	"time"
 
-	"app/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
 
 	"github.com/gomodule/redigo/redis"
 

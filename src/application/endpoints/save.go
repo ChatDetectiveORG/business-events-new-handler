@@ -1,10 +1,11 @@
 package endpoints
 
 import (
-	"app/src/infrastructure/postgresql"
 	"encoding/json"
 	"strconv"
 	"time"
+
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/postgresql"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
@@ -18,7 +19,7 @@ func NewSaveEndpoint() h.Endpoint {
 	ep.Init(
 		"save",
 		*h.HandlerChain{}.Init(
-			10 * time.Second,
+			10*time.Second,
 			h.InitChainHandler(saveMessage, h.EndOnError),
 		),
 		h.BusinessEvent(h.BusEventTypeNew),
@@ -45,7 +46,7 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash").Update()
 		if e.IsNonNil(eraw) {
 			return e.FromError(eraw, "failed to update user business connection id hash")
-		}		
+		}
 	}
 
 	businessConnectionIDHash, err := utils.ToSecureHash(update.BusinessMessage.BusinessConnectionID)
@@ -95,12 +96,21 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	message := &models.Message{
-		SenderID: encryptedId,
-		ChatID: encryptedChatId,
-		ChatIDHash: chatIDHash,
-		MessageID: update.BusinessMessage.ID,
+		SenderID:                 encryptedId,
+		ChatID:                   encryptedChatId,
+		ChatIDHash:               chatIDHash,
+		MessageID:                update.BusinessMessage.ID,
 		BusinessConnectionIDHash: businessConnectionIDHash,
-		Metadata: encryptedMetadata,
+		Metadata:                 encryptedMetadata,
+	}
+
+	if update.BusinessMessage.AlbumID != "" {
+		mediaGroupIDHash, err := utils.ToSecureHash(update.BusinessMessage.AlbumID)
+		if e.IsNonNil(err) {
+			return e.FromError(err, "failed to get secure hash")
+		}
+
+		message.MediaGroupIDHash = mediaGroupIDHash
 	}
 
 	_, eraw = db.Model(message).Insert()
