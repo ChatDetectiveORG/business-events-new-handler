@@ -95,6 +95,11 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		return e.FromError(err, "failed to get secure hash")
 	}
 
+	senderIdHash, err := utils.ToSecureHash(update.BusinessMessage.Sender.ID)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get secure hash")
+	}
+
 	message := &models.Message{
 		SenderID:                 encryptedId,
 		ChatID:                   encryptedChatId,
@@ -102,6 +107,7 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		MessageID:                update.BusinessMessage.ID,
 		BusinessConnectionIDHash: businessConnectionIDHash,
 		Metadata:                 encryptedMetadata,
+		SenderIDHash:             senderIdHash,
 	}
 
 	if update.BusinessMessage.AlbumID != "" {
