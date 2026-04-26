@@ -1,12 +1,14 @@
 package endpoints
 
 import (
+	"bytes"
 	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/postgresql"
 
+	"github.com/go-pg/pg/v10"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
@@ -124,5 +126,51 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 		return e.FromError(eraw, "failed to insert message")
 	}
 
+	if update.BusinessMessage.Private() {
+		if err := ensurePrivateChatUserRelation(db, update.BusinessMessage.Sender.ID, update.BusinessMessage.Chat.ID); e.IsNonNil(err) {
+			return err
+		}
+	}
+
+	return e.Nil()
+}
+
+// ensurePrivateChatUserRelation records that two registered users may know each other (private chat).
+// Both must already exist as Telegramuser rows; missing either side is ignored.
+func ensurePrivateChatUserRelation(db *pg.DB, tgID1, tgID2 int64) *e.ErrorInfo {
+	if tgID1 == tgID2 {
+		return e.Nil()
+	}
+	u1 := &models.Telegramuser{}
+	if err := u1.GetByTelegramID(db, tgID1); e.IsNonNil(err) {
+		return e.Nil()
+	}
+	u2 := &models.Telegramuser{}
+	if err := u2.GetByTelegramID(db, tgID2); e.IsNonNil(err) {
+		return e.Nil()
+	}
+	var first, second []byte
+	if bytes.Compare(u1.ID, u2.ID) < 0 {
+		first, second = u1.ID, u2.ID
+	} else {
+		first, second = u2.ID, u1.ID
+	}
+	n, eraw := db.Model((*models.UserRelations)(nil)).
+		Where("first_user_id = ? AND second_user_id = ?", first, second).
+		Count()
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to count user relations")
+	}
+	if n > 0 {
+		return e.Nil()
+	}
+	rel := &models.UserRelations{
+		FirstUserID:  first,
+		SecondUserID: second,
+	}
+	_, eraw = db.Model(rel).Insert()
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to insert user relation")
+	}
 	return e.Nil()
 }

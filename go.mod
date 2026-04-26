@@ -44,3 +44,5 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 	mellium.im/sasl v0.3.1 // indirect
 )
+
+replace gopkg.in/telebot.v4 => ../forks/telebot

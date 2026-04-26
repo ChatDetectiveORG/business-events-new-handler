@@ -38,6 +38,7 @@ func InitPostgresql() *e.ErrorInfo {
 		(*models.Message)(nil),
 		(*models.Telegramuser)(nil),
 		(*models.UserSettings)(nil),
+		(*models.UserRelations)(nil),
 		(*models.Admin)(nil),
 		(*models.MessageVersion)(nil),
 		(*models.UserLevels)(nil),
