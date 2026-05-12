@@ -1,14 +1,15 @@
 package application
 
 import (
-	"github.com/ChatDetectiveORG/business-events-new-handler/src/application/endpoints"
-	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
-	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/rabbitmq"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"sync"
+
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/application/endpoints"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/config"
+	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/rabbitmq"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"

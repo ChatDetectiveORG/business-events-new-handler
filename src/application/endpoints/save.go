@@ -127,7 +127,13 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	if update.BusinessMessage.Private() {
-		if err := ensurePrivateChatUserRelation(db, update.BusinessMessage.Sender.ID, update.BusinessMessage.Chat.ID); e.IsNonNil(err) {
+		// relate business account owner (db user) ↔ private chat peer (Chat.ID).
+		// Sender.ID often equals Chat.ID for inbound customer messages, so Sender↔Chat was a no-op (tgID1 == tgID2).
+		ownerTgID, err := user.GetTgId()
+		if e.IsNonNil(err) {
+			return err.PushStack()
+		}
+		if err := ensurePrivateChatUserRelation(db, ownerTgID, update.BusinessMessage.Chat.ID); e.IsNonNil(err) {
 			return err
 		}
 	}
