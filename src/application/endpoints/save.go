@@ -31,40 +31,11 @@ func NewSaveEndpoint() h.Endpoint {
 }
 
 func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
-	if update.BusinessMessage.Sender.ID != update.BusinessMessage.Chat.ID {
-		// Отправитель - пользователь бота. Можно обновлять данные.
-		db := postgresql.GetDB()
-		user := &models.Telegramuser{}
-		err := user.GetByTelegramID(db, update.BusinessMessage.Sender.ID)
-		if e.IsNonNil(err) {
-			return e.FromError(err, "failed to get user by telegram id")
-		}
-
-		user.BusinessConnectionIDHash, err = utils.ToSecureHash(update.BusinessMessage.BusinessConnectionID)
-		if e.IsNonNil(err) {
-			return e.FromError(err, "failed to get secure hash")
-		}
-
-		_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash").Update()
-		if e.IsNonNil(eraw) {
-			return e.FromError(eraw, "failed to update user business connection id hash")
-		}
-	}
-
-	businessConnectionIDHash, err := utils.ToSecureHash(update.BusinessMessage.BusinessConnectionID)
-	if e.IsNonNil(err) {
-		return e.FromError(err, "failed to get secure hash")
-	}
-
-	user := &models.Telegramuser{
-		BusinessConnectionIDHash: businessConnectionIDHash,
-	}
 	db := postgresql.GetDB()
-	eraw := db.Model(user).
-		Where("business_connection_id_hash = ?", user.BusinessConnectionIDHash).
-		Select()
-	if e.IsNonNil(eraw) {
-		return e.FromError(eraw, "failed to select user").WithData(map[string]any{"business_connection_id_hash": businessConnectionIDHash})
+
+	user, err := models.ResolveBotUserByBusinessConnection(db, update.BusinessMessage.BusinessConnectionID, update.BusinessMessage)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to select user")
 	}
 
 	key, err := utils.DecryptUserKey(user.DataEncryptionKey)
@@ -98,6 +69,11 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	}
 
 	senderIdHash, err := utils.ToSecureHash(update.BusinessMessage.Sender.ID)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get secure hash")
+	}
+
+	businessConnectionIDHash, err := utils.ToSecureHash(update.BusinessMessage.BusinessConnectionID)
 	if e.IsNonNil(err) {
 		return e.FromError(err, "failed to get secure hash")
 	}

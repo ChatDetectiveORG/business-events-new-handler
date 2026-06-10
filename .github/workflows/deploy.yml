@@ -1,71 +1,74 @@
-name: Deploy
+name: Build and Push Image
 
 on:
   push:
     branches:
       - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  SERVICE_DIR: business-events-new-handler
+  IMAGE_NAME: business-events-new-handler
+  GO_VERSION: "1.23.3"
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Echo deploy not specified
-        run: echo "Deploy called. No deploy specified. Edit deploy.yml to specify a deploy target."
+      - name: Checkout service
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.SERVICE_DIR }}
 
-      # - name: Checkout code
-      #   uses: actions/checkout@v4
+      - name: Checkout shared module
+        uses: actions/checkout@v4
+        with:
+          repository: ChatDetectiveORG/shared
+          path: shared
+          token: ${{ secrets.REPO_READ_TOKEN || github.token }}
 
-      # - name: Log in to DockerHub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Checkout telebot fork
+        uses: actions/checkout@v4
+        with:
+          repository: bloodofspring/telebot
+          path: forks/telebot
 
-      # - name: Build and push Docker image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: ./app
-      #     file: .docker/Dockerfile
-      #     target: prod
-      #     push: true
-      #     tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.PROJECT_NAME }}:latest
+      - name: Set lowercase owner
+        run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
-      # - name: Deploy to VPS via SSH
-      #   uses: appleboy/ssh-action@v1.0.3
-      #   env:
-      #     POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
-      #     POSTGRES_PORT: ${{ vars.POSTGRES_PORT }}
-      #     POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      #     POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      #     POSTGRES_DB: ${{ vars.POSTGRES_DB }}
-      #     TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      #     DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     PROJECT_NAME: ${{ vars.PROJECT_NAME }}
-      #     TELEGRAM_BOT_WEBHOOK_PORT: ${{ vars.TELEGRAM_BOT_WEBHOOK_PORT }}
-      #     PUBLIC_POSTGRES_PORT: ${{ vars.PUBLIC_POSTGRES_PORT }}
-      #     DOCKER_TARGET: ${{ vars.DOCKER_TARGET }}
-      #   with:
-      #     host: ${{ secrets.VPS_HOST }}
-      #     username: ${{ secrets.VPS_USER }}
-      #     key: ${{ secrets.VPS_SSH_KEY }}
-      #     envs: |
-      #       POSTGRES_HOST,
-      #       POSTGRES_PORT,
-      #       POSTGRES_USER,
-      #       POSTGRES_PASSWORD,
-      #       POSTGRES_DB,
-      #       TELEGRAM_BOT_TOKEN,
-      #       DOCKERHUB_USERNAME,
-      #       PROJECT_NAME,
-      #       TELEGRAM_BOT_WEBHOOK_PORT,
-      #       PUBLIC_POSTGRES_PORT,
-      #       DOCKER_TARGET,
-      #     script: |
-      #       cd /var/www/${PROJECT_NAME}
-      #       git pull 
-      #       cd /var/www/${PROJECT_NAME}/.docker
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ env.SERVICE_DIR }}/go.sum
 
-      #       docker compose -p ${PROJECT_NAME} -f docker-compose.prod.yml pull
-      #       docker compose -p ${PROJECT_NAME} -f docker-compose.prod.yml down
-      #       docker compose -p ${PROJECT_NAME} -f docker-compose.prod.yml up -d bot
-      #       docker system prune -f --filter "label=com.docker.compose.project=${PROJECT_NAME}"
+      - name: Test
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go test ./...
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.SERVICE_DIR }}/.docker/Dockerfile
+          target: prod
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ env.owner_lc }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ghcr.io/${{ env.owner_lc }}/${{ env.IMAGE_NAME }}:latest
