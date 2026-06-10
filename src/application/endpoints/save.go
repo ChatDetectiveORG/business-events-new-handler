@@ -3,16 +3,17 @@ package endpoints
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"strconv"
 	"time"
 
 	"github.com/ChatDetectiveORG/business-events-new-handler/src/infrastructure/postgresql"
 
-	"github.com/go-pg/pg/v10"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	utils "github.com/ChatDetectiveORG/shared/utils"
+	"github.com/go-pg/pg/v10"
 	tele "gopkg.in/telebot.v4"
 )
 
@@ -105,13 +106,17 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 	if update.BusinessMessage.Private() {
 		// relate business account owner (db user) ↔ private chat peer (Chat.ID).
 		// Sender.ID often equals Chat.ID for inbound customer messages, so Sender↔Chat was a no-op (tgID1 == tgID2).
-		ownerTgID, err := user.GetTgId()
-		if e.IsNonNil(err) {
-			return err.PushStack()
-		}
-		if err := ensurePrivateChatUserRelation(db, ownerTgID, update.BusinessMessage.Chat.ID); e.IsNonNil(err) {
+		if err := ensurePrivateChatUserRelation(db, user, &tele.User{
+			ID: update.BusinessMessage.Chat.ID,
+			FirstName: update.BusinessMessage.Chat.FirstName,
+			LastName: update.BusinessMessage.Chat.LastName,
+			Username: update.BusinessMessage.Chat.Username,
+			Usernames: []string{update.BusinessMessage.Chat.Username},
+		}); e.IsNonNil(err) {
 			return err
 		}
+	} else {
+		log.Println("Message save process: message is not private")
 	}
 
 	return e.Nil()
@@ -119,25 +124,30 @@ func saveMessage(update tele.Update, hashe *h.HandlerChainHashe) *e.ErrorInfo {
 
 // ensurePrivateChatUserRelation records that two registered users may know each other (private chat).
 // Both must already exist as Telegramuser rows; missing either side is ignored.
-func ensurePrivateChatUserRelation(db *pg.DB, tgID1, tgID2 int64) *e.ErrorInfo {
-	if tgID1 == tgID2 {
+func ensurePrivateChatUserRelation(db *pg.DB, botUserModel *models.Telegramuser, interlocutor *tele.User) *e.ErrorInfo {
+	interlocutorModel := &models.Telegramuser{}
+	tx, eRaw := db.Begin()
+	defer tx.Rollback()
+
+	if e.IsNonNil(eRaw) {
+		return e.FromError(eRaw, "failed to begin transaction")
+	}
+	if _, err := interlocutorModel.GetOrCreate(tx, interlocutor); e.IsNonNil(err) {
 		return e.Nil()
 	}
-	u1 := &models.Telegramuser{}
-	if err := u1.GetByTelegramID(db, tgID1); e.IsNonNil(err) {
+
+	if bytes.Equal(botUserModel.ID, interlocutorModel.ID) {
 		return e.Nil()
 	}
-	u2 := &models.Telegramuser{}
-	if err := u2.GetByTelegramID(db, tgID2); e.IsNonNil(err) {
-		return e.Nil()
-	}
+
 	var first, second []byte
-	if bytes.Compare(u1.ID, u2.ID) < 0 {
-		first, second = u1.ID, u2.ID
+	if bytes.Compare(botUserModel.ID, interlocutorModel.ID) < 0 {
+		first, second = botUserModel.ID, interlocutorModel.ID
 	} else {
-		first, second = u2.ID, u1.ID
+		first, second = interlocutorModel.ID, botUserModel.ID
 	}
-	n, eraw := db.Model((*models.UserRelations)(nil)).
+
+	n, eraw := tx.Model((*models.UserRelations)(nil)).
 		Where("first_user_id = ? AND second_user_id = ?", first, second).
 		Count()
 	if e.IsNonNil(eraw) {
@@ -146,13 +156,19 @@ func ensurePrivateChatUserRelation(db *pg.DB, tgID1, tgID2 int64) *e.ErrorInfo {
 	if n > 0 {
 		return e.Nil()
 	}
+	
 	rel := &models.UserRelations{
 		FirstUserID:  first,
 		SecondUserID: second,
 	}
-	_, eraw = db.Model(rel).Insert()
+	_, eraw = tx.Model(rel).Insert()
 	if e.IsNonNil(eraw) {
 		return e.FromError(eraw, "failed to insert user relation")
 	}
+
+	if eRaw = tx.Commit(); e.IsNonNil(eRaw) {
+		return e.FromError(eRaw, "failed to commit transaction")
+	}
+
 	return e.Nil()
 }
